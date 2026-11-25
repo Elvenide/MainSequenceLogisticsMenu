@@ -40,7 +40,7 @@ Inspect your station's total stored inventory and production/consumption through
 ### Configuration
 
 - **In-Game**: Open **Settings → Controls** and look for **Logistics** to rebind the key, revert to default (`L`), or clear the binding.
-- **Config File**: Stored in `MainSequenceLogisticsMenu/config.json` under `"LogisticsKey"`.
+- **Config File**: Stored in `ElvenidesLogisticsMenu/config.json` under `"LogisticsKey"`.
 
 ## Credits
 

@@ -24,7 +24,7 @@ Choose either **MSCoreManager** (recommended) or **Manual UE4SS Installation** b
    - Paste in `https://github.com/Elvenide/MainSequenceLogisticsMenu` to install automatically from GitHub Releases (MSCoreManager uses `manifest.txt` and **$(System.Collections.Hashtable.ZipBase)-v<version>.zip**).
    - *(Alternatively, if installing from a local archive in MSCoreManager, download **$(System.Collections.Hashtable.ZipBase)-v<version>.zip** from [github.com/Elvenide/MainSequenceLogisticsMenu/releases](https://github.com/Elvenide/MainSequenceLogisticsMenu/releases).)*
 3. **Launch Main Sequence**:
-   - **Elvenide's Logistics Menu** will automatically create/update `MainSequenceLogisticsMenu\config.json` with default keybinds on first launch.
+   - **Elvenide's Logistics Menu** will automatically create/update `ElvenidesLogisticsMenu\config.json` with default keybinds on first launch.
    - Open **Settings → Controls** at any time to rebind hotkeys.
 
 ### Option 2: Manual UE4SS Installation
@@ -44,24 +44,24 @@ Choose either **MSCoreManager** (recommended) or **Manual UE4SS Installation** b
      ```
 2. **Install Elvenide's Logistics Menu**:
    - Download **$(System.Collections.Hashtable.ZipBase)-v<version>.zip** from [github.com/Elvenide/MainSequenceLogisticsMenu/releases](https://github.com/Elvenide/MainSequenceLogisticsMenu/releases).
-   - Open the zip, navigate into its `Mods\` folder, and copy the `MainSequenceLogisticsMenu` folder into:
+   - Open the zip, navigate into its `Mods\` folder, and copy the `ElvenidesLogisticsMenu` folder into:
      ```
-     Main Sequence\Windows\MainSequence\Binaries\Win64\ue4ss\Mods\MainSequenceLogisticsMenu\
+     Main Sequence\Windows\MainSequence\Binaries\Win64\ue4ss\Mods\ElvenidesLogisticsMenu\
      ```
-     *(You can safely leave `mscore.mod` inside `MainSequenceLogisticsMenu\`—UE4SS ignores it.)*
-   - Ensure `MainSequenceLogisticsMenu\enabled.txt` exists (an empty file is fine).
-   - Open `ue4ss\Mods\mods.txt` and add `MainSequenceLogisticsMenu : 1` **above** `Keybinds : 1`:
+     *(You can safely leave `mscore.mod` inside `ElvenidesLogisticsMenu\`—UE4SS ignores it.)*
+   - Ensure `ElvenidesLogisticsMenu\enabled.txt` exists (an empty file is fine).
+   - Open `ue4ss\Mods\mods.txt` and add `ElvenidesLogisticsMenu : 1` **above** `Keybinds : 1`:
      ```ini
-     MainSequenceLogisticsMenu : 1
+     ElvenidesLogisticsMenu : 1
 
      ; Built-in keybinds, do not move up!
      Keybinds : 1
      ```
 3. **Launch Main Sequence**:
-   - **Elvenide's Logistics Menu** will automatically create/update `MainSequenceLogisticsMenu\config.json` with default keybinds on first launch.
+   - **Elvenide's Logistics Menu** will automatically create/update `ElvenidesLogisticsMenu\config.json` with default keybinds on first launch.
    - Open **Settings → Controls** at any time to rebind hotkeys.
 
 ## Uninstalling
 
-- Remove or rename `MainSequenceLogisticsMenu\enabled.txt` (or delete the `MainSequenceLogisticsMenu` folder and remove `MainSequenceLogisticsMenu : 1` from `mods.txt`).
+- Remove or rename `ElvenidesLogisticsMenu\enabled.txt` (or delete the `ElvenidesLogisticsMenu` folder and remove `ElvenidesLogisticsMenu : 1` from `mods.txt`).
 - Your saves remain completely intact with no missing-mod dependencies.
