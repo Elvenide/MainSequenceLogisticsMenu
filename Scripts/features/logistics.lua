@@ -7,6 +7,7 @@
 
 local Core = require("core")
 local StationData = require("station_data")
+local HudKeyIndicator = require("hud_key_indicator")
 
 local Feature = {
     Name        = "Logistics",
@@ -44,7 +45,11 @@ local STATUS_COLORS = {
     KeyBg      = { R = 0.060,   G = 0.090,  B = 0.130,   A = 0.85 },
 }
 
-local HudKeyIndicators = {} -- hudAddr -> { Root, KeyText }
+local HudIndicator = HudKeyIndicator.Create({
+    Kind       = "Logistics",
+    ConfigKey  = "LogisticsKey",
+    DefaultKey = DEFAULT_KEY,
+})
 local ActiveLogisticsWin = nil
 local ActiveLogisticsUI = nil
 
@@ -52,40 +57,8 @@ local ActiveLogisticsUI = nil
 -- Keybind Helpers
 --------------------------------------------------------------------------------
 
-local function GetFormattedKeybind(configKey, defaultKey)
-    local keyStr = tostring(Core.Config[configKey] or defaultKey or "")
-    if keyStr == "None" or keyStr == "" then
-        keyStr = "-"
-    end
-    return keyStr
-end
-
 local function UpdateAllHudKeyIndicators()
-    for addr, entry in pairs(HudKeyIndicators) do
-        if Core.IsValidObj(entry.Root) then
-            if entry.Items then
-                for _, item in ipairs(entry.Items) do
-                    if Core.IsValidObj(item.Icon) then
-                        local kt = item.KeyText
-                        if not Core.IsValidObj(kt) then
-                            pcall(function()
-                                if Core.IsValidObj(item.Icon.WBP_InputKey) then
-                                    kt = item.Icon.WBP_InputKey.WBP_Text
-                                    item.KeyText = kt
-                                end
-                            end)
-                        end
-                        if Core.IsValidObj(kt) then
-                            local keyStr = GetFormattedKeybind(item.ConfigKey, item.DefaultKey)
-                            pcall(function() kt:SetText(Core.MakeText(keyStr)) end)
-                        end
-                    end
-                end
-            end
-        else
-            HudKeyIndicators[addr] = nil
-        end
-    end
+    HudIndicator.UpdateKeyText()
 end
 
 --------------------------------------------------------------------------------
@@ -1197,328 +1170,12 @@ local function ToggleLogistics()
 end
 
 --------------------------------------------------------------------------------
--- Top-Right HUD Keybind Indicator
---------------------------------------------------------------------------------
-
-local CachedHudIconTextures = {}
-local HudIconScanCooldown = {} -- kind -> os.clock() of last missed FindAllOf("Texture2D") scan
-
-local function FindHudIconTexture(kind, hud)
-    if Core.IsValidObj(CachedHudIconTextures[kind]) then
-        return CachedHudIconTextures[kind]
-    end
-    local now = os.clock()
-    if HudIconScanCooldown[kind] and (now - HudIconScanCooldown[kind]) < 8.0 then
-        return nil
-    end
-
-    local pathsByKind = {
-        Logistics = {
-            "/Game/Materials/UI_Textures/T_MatSciIcon.T_MatSciIcon",
-            "/Game/Materials/Icons/T_MatSciIcon.T_MatSciIcon",
-            "/Game/Textures/Icons/T_MatSciIcon.T_MatSciIcon",
-            "/Game/Textures/T_MatSciIcon.T_MatSciIcon",
-        },
-        Power = {
-            "/Game/Materials/Icons/UI/T_UI_Power.T_UI_Power",
-            "/Game/Materials/Icons/UI/T_UI_Electricity.T_UI_Electricity",
-            "/Game/Materials/Icons/UI/T_UI_Energy.T_UI_Energy",
-            "/Game/Materials/Icons/UI/T_UI_Lightning.T_UI_Lightning",
-            "/Game/Materials/Icons/UI/T_UI_Bolt.T_UI_Bolt",
-            "/Game/Materials/Icons/T_Power.T_Power",
-            "/Game/Materials/Icons/T_PowerIcon.T_PowerIcon",
-            "/Game/Materials/Icons/T_Electricity.T_Electricity",
-            "/Game/Materials/Icons/T_ElectricityIcon.T_ElectricityIcon",
-            "/Game/Materials/Icons/T_Energy.T_Energy",
-            "/Game/Materials/Icons/T_EnergyIcon.T_EnergyIcon",
-            "/Game/Materials/Icons/T_Lightning.T_Lightning",
-            "/Game/Materials/UI_Textures/T_Power.T_Power",
-            "/Game/Materials/UI_Textures/T_PowerIcon.T_PowerIcon",
-            "/Game/Materials/UI_Textures/T_Electricity.T_Electricity",
-            "/Game/Materials/UI_Textures/T_ElectricityIcon.T_ElectricityIcon",
-            "/Game/Materials/UI_Textures/T_Energy.T_Energy",
-            "/Game/Materials/UI_Textures/T_EnergyIcon.T_EnergyIcon",
-            "/Game/Textures/Icons/T_PowerIcon.T_PowerIcon",
-            "/Game/Textures/Icons/T_Power.T_Power",
-        },
-        StationMap = {
-            "/Game/Materials/Icons/UI/T_UI_StationIcon.T_UI_StationIcon",
-            "/Game/Materials/UI_Textures/T_StationMapIcon.T_StationMapIcon",
-            "/Game/Materials/UI_Textures/T_StationIcon.T_StationIcon",
-            "/Game/Materials/Icons/T_StationIcon.T_StationIcon",
-            "/Game/Materials/UI_Textures/T_MapIcon.T_MapIcon",
-            "/Game/Materials/Icons/T_MapIcon.T_MapIcon",
-        },
-    }
-
-    local tex = nil
-    for _, tPath in ipairs(pathsByKind[kind] or {}) do
-        local candidate = Core.FindOrLoadClass(tPath)
-        if Core.IsValidObj(candidate) then
-            tex = candidate
-            break
-        end
-    end
-
-    -- Reliable fallbacks from existing HUD input icons (never scan FindAllOf("Texture2D")!)
-    if not Core.IsValidObj(tex) and Core.IsValidObj(hud) then
-        if kind == "StationMap" and Core.IsValidObj(hud.MapInput) then
-            pcall(function() tex = hud.MapInput.Icon end)
-        elseif kind ~= "Power" and Core.IsValidObj(hud.ResearchInput) then
-            pcall(function() tex = hud.ResearchInput.Icon end)
-        end
-    end
-
-    if Core.IsValidObj(tex) then
-        CachedHudIconTextures[kind] = tex
-        HudIconScanCooldown[kind] = nil
-    else
-        HudIconScanCooldown[kind] = now
-    end
-    return tex
-end
-
-local function EnsureHudKeybindIndicator(hud)
-    if not Core.IsValidObj(hud) then return end
-    local addr = hud:GetAddress()
-    if HudKeyIndicators[addr] and Core.IsValidObj(HudKeyIndicators[addr].Root) then
-        return
-    end
-
-    local container = hud.HUDInputContainer
-    if not Core.IsValidObj(container) then return end
-
-    local okPC, owningPC = pcall(function() return hud:GetOwningPlayer() end)
-    local pc = (okPC and Core.IsValidObj(owningPC)) and owningPC or Core.GetLocalPlayerController()
-    local outer = Core.GetWidgetOuter(hud)
-
-    -- Inspect Tab (InventoryInput) or B (BuildingInput) slot so spacing & shift match the top row exactly
-    local refWidget = nil
-    for _, prop in ipairs({ "InventoryInput", "BuildingInput", "DisassembleInput", "MapInput" }) do
-        local okW, w = pcall(function() return hud[prop] end)
-        if okW and Core.IsValidObj(w) and Core.IsValidObj(w.Slot) then
-            refWidget = w
-            break
-        end
-    end
-    local refSlot = Core.IsValidObj(refWidget) and refWidget.Slot or nil
-
-    local padL, padR, padT, padB = 4.0, 4.0, 0.0, 0.0
-    local nudgeX, nudgeY = 0.0, 0.0
-    local refVAlign = 2
-    if Core.IsValidObj(refSlot) then
-        pcall(function()
-            local p = refSlot.Padding
-            if p then
-                padL = tonumber(p.Left) or padL
-                padR = tonumber(p.Right) or padR
-                padT = tonumber(p.Top) or padT
-                padB = tonumber(p.Bottom) or padB
-            end
-            if refSlot.Nudge then
-                nudgeX = tonumber(refSlot.Nudge.X) or 0.0
-                nudgeY = tonumber(refSlot.Nudge.Y) or 0.0
-            end
-            if type(refSlot.VerticalAlignment) == "number" then
-                refVAlign = refSlot.VerticalAlignment
-            end
-        end)
-    end
-    if nudgeX == 0.0 and Core.IsValidObj(refWidget) then
-        pcall(function()
-            local rt = refWidget.RenderTransform
-            if rt and rt.Translation then
-                nudgeX = tonumber(rt.Translation.X) or 0.0
-            end
-        end)
-    end
-    -- On WBP_CharacterHUD_C, Row 0 (Tab, B, X) sits ~22px right of Row 1 columns (T, G, K);
-    -- shift our right-anchored host by the same amount when GridSlot.Nudge isn't explicitly set.
-    if math.abs(nudgeX) < 0.5 then
-        nudgeX = 22.0
-    end
-
-    -- Wrap hostCanvas in a 1x1 SizeBox (unclipped) in Row 0, Col 1 so the GridPanel NEVER
-    -- stretches Column 1 (which would widen the base-game Map 'M' icon in Row 1, Col 1),
-    -- while [P] [N] [L] render at full size extending cleanly to the left of Tab.
-    local hostSizeBox = Core.CreateRawWidget(PATHS.SizeBoxClass, outer)
-    local hostCanvas = Core.CreateRawWidget("/Script/UMG.CanvasPanel", outer)
-    local iconsHBox = Core.CreateRawWidget(PATHS.HorizontalBoxClass, outer)
-    if not (Core.IsValidObj(hostSizeBox) and Core.IsValidObj(hostCanvas) and Core.IsValidObj(iconsHBox)) then return end
-
-    pcall(function()
-        hostSizeBox:SetWidthOverride(1.0)
-        hostSizeBox:SetHeightOverride(1.0)
-        if hostSizeBox.SetClipping then hostSizeBox:SetClipping(0) end
-        if hostCanvas.SetClipping then hostCanvas:SetClipping(0) end
-    end)
-    hostSizeBox:AddChild(hostCanvas)
-
-    local cSlot = hostCanvas:AddChildToCanvas(iconsHBox)
-    if Core.IsValidObj(cSlot) then
-        pcall(function()
-            cSlot:SetAnchors({ Minimum = { X = 1.0, Y = 0.5 }, Maximum = { X = 1.0, Y = 0.5 } })
-            cSlot:SetAlignment({ X = 1.0, Y = 0.5 })
-            cSlot:SetAutoSize(true)
-            cSlot:SetPosition({ X = nudgeX, Y = nudgeY })
-        end)
-    end
-
-    local inputIconCls = "/Game/Blueprints/Widgets/HUDs/WBP_InputIcon.WBP_InputIcon_C"
-    local defs = {
-        { Kind = "Power",      FeatureName = "PowerOverview", ConfigKey = "PowerOverviewKey", DefaultKey = "P" },
-        { Kind = "StationMap", FeatureName = "StationMap",    ConfigKey = "StationMapKey",    DefaultKey = "N" },
-        { Kind = "Logistics",  FeatureName = "Logistics",     ConfigKey = "LogisticsKey",     DefaultKey = DEFAULT_KEY },
-    }
-
-    local createdItems = {}
-    for _, def in ipairs(defs) do
-        local iconW = Core.CreateUserWidget(inputIconCls, hud, pc)
-        if Core.IsValidObj(iconW) then
-            local itemEntry = {
-                Kind = def.Kind,
-                FeatureName = def.FeatureName,
-                ConfigKey = def.ConfigKey,
-                DefaultKey = def.DefaultKey,
-                Icon = iconW,
-                IconAddr = iconW:GetAddress(),
-                KeyText = nil,
-            }
-
-            local function ApplyVisuals()
-                local tex = FindHudIconTexture(def.Kind, hud)
-                local keyStr = GetFormattedKeybind(def.ConfigKey, def.DefaultKey)
-                pcall(function()
-                    if Core.IsValidObj(tex) then
-                        iconW.Icon = tex
-                        if Core.IsValidObj(iconW.Image_82) then
-                            iconW.Image_82:SetBrushFromTexture(tex, false)
-                        end
-                    end
-                    if Core.IsValidObj(iconW.WBP_InputKey) and Core.IsValidObj(iconW.WBP_InputKey.WBP_Text) then
-                        itemEntry.KeyText = iconW.WBP_InputKey.WBP_Text
-                        itemEntry.KeyText:SetText(Core.MakeText(keyStr))
-                    end
-                    local featEnabled = (not def.FeatureName) or Core.IsFeatureEnabled(def.FeatureName)
-                    iconW:SetVisibility(featEnabled and 0 or 1)
-                end)
-            end
-
-            ApplyVisuals()
-            ExecuteInGameThreadAfterFrames(1, function()
-                if Core.IsValidObj(iconW) then ApplyVisuals() end
-            end)
-
-            local hSlot = iconsHBox:AddChildToHorizontalBox(iconW)
-            if Core.IsValidObj(hSlot) then
-                pcall(function()
-                    hSlot:SetPadding({ Left = padL, Top = padT, Right = padR, Bottom = padB })
-                    hSlot:SetVerticalAlignment(refVAlign)
-                end)
-            end
-            createdItems[#createdItems + 1] = itemEntry
-        end
-    end
-
-    if #createdItems == 0 then return end
-
-    local gSlot = container:AddChildToGrid(hostSizeBox, 0, 1)
-    if Core.IsValidObj(gSlot) then
-        pcall(function()
-            gSlot:SetPadding({ Left = 0.0, Top = 0.0, Right = 0.0, Bottom = 0.0 })
-            gSlot:SetHorizontalAlignment(3) -- Right
-            gSlot:SetVerticalAlignment(2)   -- Center
-        end)
-    end
-
-    HudKeyIndicators[addr] = { Root = hostSizeBox, Items = createdItems }
-end
-
-local HudIndicatorPollActive = false
-
-local function AnyHudIndicatorFeatureEnabled()
-    return Core.IsFeatureEnabled("Logistics")
-        or Core.IsFeatureEnabled("StationMap")
-        or Core.IsFeatureEnabled("PowerOverview")
-end
-
-local function StartHudIndicatorPoll()
-    if HudIndicatorPollActive or not AnyHudIndicatorFeatureEnabled() then return end
-    HudIndicatorPollActive = true
-
-    local function Tick()
-        if not AnyHudIndicatorFeatureEnabled() then
-            for addr, entry in pairs(HudKeyIndicators) do
-                if Core.IsValidObj(entry.Root) then
-                    pcall(function() entry.Root:SetVisibility(1) end)
-                else
-                    HudKeyIndicators[addr] = nil
-                end
-            end
-            HudIndicatorPollActive = false
-            return
-        end
-        local anyValid = false
-        local pc = Core.GetLocalPlayerController()
-        local showIndicator = false
-        if Core.IsValidObj(pc) then
-            local playerObj = pc.PlayerObject
-            local piloting = Core.IsValidObj(playerObj) and Core.IsValidObj(playerObj.PilotedShip)
-            if not piloting then
-                local inStation = StationData.IsPlayerInStation(pc)
-                showIndicator = inStation == true
-            end
-        end
-
-        local targetVis = showIndicator and 0 or 1 -- Visible or Collapsed
-        for addr, entry in pairs(HudKeyIndicators) do
-            if Core.IsValidObj(entry.Root) then
-                anyValid = true
-                if entry.LastVis ~= targetVis then
-                    entry.LastVis = targetVis
-                    pcall(function() entry.Root:SetVisibility(targetVis) end)
-                end
-                if showIndicator and entry.Items then
-                    for _, item in ipairs(entry.Items) do
-                        local featOn = (not item.FeatureName) or Core.IsFeatureEnabled(item.FeatureName)
-                        local iconVis = featOn and 0 or 1
-                        if Core.IsValidObj(item.Icon) and item.LastIconVis ~= iconVis then
-                            item.LastIconVis = iconVis
-                            pcall(function() item.Icon:SetVisibility(iconVis) end)
-                        end
-                        if featOn and Core.IsValidObj(item.KeyText) then
-                            local keyStr = GetFormattedKeybind(item.ConfigKey, item.DefaultKey)
-                            if item.LastKeyStr ~= keyStr then
-                                item.LastKeyStr = keyStr
-                                pcall(function() item.KeyText:SetText(Core.MakeText(keyStr)) end)
-                            end
-                        end
-                    end
-                end
-            else
-                HudKeyIndicators[addr] = nil
-            end
-        end
-
-        if anyValid then
-            ExecuteInGameThreadWithDelay(1200, Tick)
-        else
-            HudIndicatorPollActive = false
-        end
-    end
-
-    ExecuteInGameThreadWithDelay(1200, Tick)
-end
-
---------------------------------------------------------------------------------
 -- Feature Lifecycle
 --------------------------------------------------------------------------------
 
 Feature.WatchWidgets = {
     WBP_CharacterHUD_C = function(hud)
-        if not AnyHudIndicatorFeatureEnabled() then return end
-        EnsureHudKeybindIndicator(hud)
-        StartHudIndicatorPoll()
+        HudIndicator.EnsureForHud(hud)
     end,
 }
 
@@ -1541,8 +1198,6 @@ function Feature.Init()
     end
 end
 
-local InitialLogisticsWidgetScanDone = false
-
 function Feature.RegisterHooks()
     Core.TryRegisterHook(
         "WindowBase_CloseWindow_Logistics",
@@ -1554,63 +1209,7 @@ function Feature.RegisterHooks()
             end
         end
     )
-
-    Core.TryRegisterHook(
-        "InputIcon_RefreshVisible_Logistics",
-        "/Game/Blueprints/Widgets/HUDs/WBP_InputIcon.WBP_InputIcon_C:RefreshVisible",
-        function(Context)
-            local iconW = Context:get()
-            if not Core.IsValidObj(iconW) then return end
-            local iconAddr = iconW:GetAddress()
-            for _, entry in pairs(HudKeyIndicators) do
-                if entry.Items then
-                    for _, item in ipairs(entry.Items) do
-                        if item.IconAddr == iconAddr then
-                            pcall(function()
-                                local featEnabled = (not item.FeatureName) or Core.IsFeatureEnabled(item.FeatureName)
-                                iconW:SetVisibility(featEnabled and 0 or 1)
-                                local kt = item.KeyText
-                                if not Core.IsValidObj(kt) and Core.IsValidObj(iconW.WBP_InputKey) then
-                                    kt = iconW.WBP_InputKey.WBP_Text
-                                    item.KeyText = kt
-                                end
-                                if Core.IsValidObj(kt) then
-                                    local keyStr = GetFormattedKeybind(item.ConfigKey, item.DefaultKey)
-                                    kt:SetText(Core.MakeText(keyStr))
-                                end
-                            end)
-                            return
-                        end
-                    end
-                end
-            end
-        end
-    )
-
-    Core.TryRegisterHook(
-        "CharacterHUD_RefreshKeybinds_Logistics",
-        "/Game/Blueprints/Widgets/HUDs/WBP_CharacterHUD.WBP_CharacterHUD_C:RefreshKeybinds",
-        function(Context)
-            if not AnyHudIndicatorFeatureEnabled() then return end
-            local hud = Context:get()
-            if Core.IsValidObj(hud) then
-                EnsureHudKeybindIndicator(hud)
-                StartHudIndicatorPoll()
-                UpdateAllHudKeyIndicators()
-            end
-        end
-    )
-
-    if not InitialLogisticsWidgetScanDone then
-        InitialLogisticsWidgetScanDone = true
-        if AnyHudIndicatorFeatureEnabled() then
-            local okHud, h = pcall(FindFirstOf, "WBP_CharacterHUD_C")
-            if okHud and Core.IsValidObj(h) then
-                EnsureHudKeybindIndicator(h)
-                StartHudIndicatorPoll()
-            end
-        end
-    end
+    HudIndicator.RegisterHooks()
 end
 
 function Feature.OnToggle(enabled)
@@ -1623,18 +1222,11 @@ end
 function Feature.OnMapLoad()
     DestroyLogisticsWindow()
     CachedWidgetClasses = {}
-    CachedHudIconTextures = {}
-    HudIconScanCooldown = {}
     CachedWblCDO = nil
 end
 
 function Feature.PruneCaches()
-    for addr, entry in pairs(HudKeyIndicators) do
-        if not Core.IsValidObj(entry.Root) then HudKeyIndicators[addr] = nil end
-    end
-    for k, tex in pairs(CachedHudIconTextures) do
-        if not Core.IsValidObj(tex) then CachedHudIconTextures[k] = nil end
-    end
+    HudIndicator.PruneCaches()
     if ActiveLogisticsWin and not Core.IsValidObj(ActiveLogisticsWin) then
         ActiveLogisticsWin = nil
         ActiveLogisticsUI = nil
